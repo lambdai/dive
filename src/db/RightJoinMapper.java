@@ -23,9 +23,7 @@ public class RightJoinMapper extends
 	public void setup(Context context) {
 		Configuration conf = context.getConfiguration();
 		String join_using_columns = conf.get(Constant.JOIN_USING);
-		String schema_str = conf.get(Constant.RIGHT_JOIN_SCHEMA);
-		Schema schema = new Schema("right");
-		schema.parseAndSetRecordDescriptor(schema_str);
+		Schema schema = Schema.createSchema(conf.get(Constant.RIGHT_JOIN_SCHEMA));
 		row = Row.createBySchema(schema);
 		keyColumnIndexes = Schema.columnIndexes(schema,
 				SchemaUtils.parseColumns(join_using_columns));
@@ -40,7 +38,7 @@ public class RightJoinMapper extends
 			throws IOException, InterruptedException {
 		row.readFieldsFromBytes(value);
 		row.writeToBytes(tKey, keyColumnIndexes);
-		row.writeToBytesWithLeftMark(tValue, valueColumnIndexes);
+		row.writeToBytesWithRightMark(tValue, valueColumnIndexes);
 		context.write(tKey, tValue);
 	}
 

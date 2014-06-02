@@ -2,6 +2,8 @@ package db;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -13,6 +15,8 @@ import db.table.SchemaUtils;
 public class LeftJoinMapper extends
 		Mapper<BytesWritable, BytesWritable, BytesWritable, BytesWritable> {
 
+	public static final Log LOG = LogFactory.getLog(LeftJoinMapper.class);
+	
 	int[] keyColumnIndexes;
 	int[] valueColumnIndexes;
 
@@ -23,9 +27,7 @@ public class LeftJoinMapper extends
 	public void setup(Context context) {
 		Configuration conf = context.getConfiguration();
 		String join_using_columns = conf.get(Constant.JOIN_USING);
-		String schema_str = conf.get(Constant.LEFT_JOIN_SCHEMA);
-		Schema schema = new Schema("left");
-		schema.parseAndSetRecordDescriptor(schema_str);
+		Schema schema = Schema.createSchema(conf.get(Constant.LEFT_JOIN_SCHEMA));
 		row = Row.createBySchema(schema);
 		keyColumnIndexes = Schema.columnIndexes(schema,
 				SchemaUtils.parseColumns(join_using_columns));
@@ -39,6 +41,7 @@ public class LeftJoinMapper extends
 	public void map(BytesWritable key, BytesWritable value, Context context)
 			throws IOException, InterruptedException {
 		row.readFieldsFromBytes(value);
+		LOG.fatal(row.toString());
 		row.writeToBytes(tKey, keyColumnIndexes);
 		row.writeToBytesWithLeftMark(tValue, valueColumnIndexes);
 		context.write(tKey, tValue);
