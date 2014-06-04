@@ -10,6 +10,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapreduce.Reducer;
 
+import db.sql.SelectionPipe;
 import db.table.IntField;
 import db.table.JoinRowFactory;
 import db.table.JoinedRow;
@@ -26,7 +27,11 @@ public class JoinReducer extends Reducer<BytesWritable, BytesWritable, BytesWrit
 	Schema rightValueSchema;
 	BytesWritable tKey;
 	BytesWritable tValue;
-	
+	/*
+	RowEvaluationClosure rowClosure = null;
+	Evaluator whereEvaluator = null;
+	*/
+	SelectionPipe selectionPipe;
 	public void setup(Context context) {
 		Configuration conf = context.getConfiguration();
 		String join_using_columns = conf.get(Constant.JOIN_USING);
@@ -48,7 +53,17 @@ public class JoinReducer extends Reducer<BytesWritable, BytesWritable, BytesWrit
 		
 		rightValueSchema = rightSchema.createSubSchema(rValueColumnIndexes);
 		
-		
+		String whereStr = conf.get(Constant.WHERE);
+/*		if(whereStr != null) {
+			BoolExpr whereExpr = new WhereParser(whereStr).parseBoolExpr();
+			RowEvaluatorFactory rowEvalFactory = new RowEvaluatorFactory();
+			rowEvalFactory.setClosure(new RowEvaluationClosure());
+			rowClosure = rowEvalFactory.getCloseure();
+			rowClosure.setSchema(result_schema);
+			whereEvaluator = whereExpr.createEvaluator(rowEvalFactory);
+		}
+*/
+		selectionPipe = new SelectionPipe(whereStr, result_schema);
 		joinedRow = JoinedRow.createBySchema(result_schema, leftSchema, rightSchema, join_using_columns);
 		factory = new JoinRowFactory();
 		tKey = Constant.EMPTY_BYTESWRITABLE;
@@ -69,14 +84,14 @@ public class JoinReducer extends Reducer<BytesWritable, BytesWritable, BytesWrit
 			if(markField.equals(Row.fieldMarkLeft)) {
 				currentList = leftRows;
 				row = Row.createBySchema(leftValueSchema);
-				LOG.fatal("LEFT : " + joinedRow.getFields()[0].toString());
+				//LOG.fatal("LEFT : " + joinedRow.getFields()[0].toString());
 			} else {
 				currentList = rightRows;
 				row = Row.createBySchema(rightValueSchema);
-				LOG.fatal("RIGHT: " + joinedRow.getFields()[0].toString());
+				//LOG.fatal("RIGHT: " + joinedRow.getFields()[0].toString());
 			}
 			factory.readRemaining(row);
-			LOG.fatal(row.getFields()[0].toString());
+			//LOG.fatal(row.getFields()[0].toString());
 			currentList.add(row);
 		}
 		
@@ -86,12 +101,23 @@ public class JoinReducer extends Reducer<BytesWritable, BytesWritable, BytesWrit
 			for(Row right:rightRows) {
 				joinedRow.setCursorOnRight();
 				joinedRow.push(right);
-				joinedRow.writeToBytes(tValue);
-				context.write(tKey, tValue);
+				
+				selectionPipe.write(joinedRow);
+				Row passedRow = selectionPipe.read();
+				if(passedRow != null) {
+					joinedRow.writeToBytes(tValue);
+					context.write(tKey, tValue);
+				}
+				/*
+				if(whereEvaluator != null) {
+					rowClosure.setRow(joinedRow);
+					if(whereEvaluator.evalutate()) {
+						context.write(tKey, tValue);
+					}
+				}
+				*/
 			}
 		}
-		
-		
 	}
 
 }
